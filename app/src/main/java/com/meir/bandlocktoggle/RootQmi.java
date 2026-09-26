@@ -14,13 +14,6 @@ final class RootQmi {
         StringBuilder out = new StringBuilder();
 
         try {
-            /*
-             * Run exactly like the working Termux command:
-             *
-             * su -c '/path/to/qmi_tool args'
-             *
-             * Everything after -c is one shell command.
-             */
             String command = shellQuote(path);
 
             if (args != null && !args.trim().isEmpty()) {
@@ -28,7 +21,7 @@ final class RootQmi {
             }
 
             p = new ProcessBuilder(
-                    "su",
+                    "/system/bin/su",
                     "-c",
                     command
             )
@@ -51,15 +44,11 @@ final class RootQmi {
 
             String output = out.toString().trim();
 
-            if (code == 0) {
-                return new Result(true, code, output);
-            }
-
             return new Result(
-                    false,
+                    code == 0,
                     code,
                     output.isEmpty()
-                            ? "Command failed (exit code " + code + ")"
+                            ? ("exit code " + code)
                             : output
             );
 
@@ -82,21 +71,16 @@ final class RootQmi {
     }
 
     static Result apply(String path, String mode) {
-
-        String command;
-
-        if ("ALL".equals(mode)) {
-            command = "unlock";
-        } else {
-            command = "band_lock " + mode;
-        }
-
-        return run(path, command);
+        return run(
+                path,
+                mode.equals("ALL")
+                        ? "unlock"
+                        : "band_lock " + mode
+        );
     }
 
     private static String shellQuote(String value) {
-
-        if (value == null || value.isEmpty()) {
+        if (value == null) {
             return "''";
         }
 
