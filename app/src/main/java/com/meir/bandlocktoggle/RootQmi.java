@@ -21,14 +21,18 @@ final class RootQmi {
             }
 
             /*
-             * -mm / --mount-master:
-             * use the global/master mount namespace.
+             * Use "su" instead of hardcoding /system/bin/su.
              *
-             * This is important because qmi_tool lives inside
-             * Termux's private /data/data filesystem.
+             * KSU Next exposes su through the app's executable PATH,
+             * while /system/bin/su may not be directly visible from
+             * the application process namespace.
+             *
+             * -mm = mount-master namespace.
+             * This is required so the root process can see Termux's
+             * private /data/data filesystem.
              */
             p = new ProcessBuilder(
-                    "/system/bin/su",
+                    "su",
                     "-mm",
                     "-c",
                     command
