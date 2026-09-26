@@ -20,8 +20,16 @@ final class RootQmi {
                 command += " " + args;
             }
 
+            /*
+             * -mm / --mount-master:
+             * use the global/master mount namespace.
+             *
+             * This is important because qmi_tool lives inside
+             * Termux's private /data/data filesystem.
+             */
             p = new ProcessBuilder(
                     "/system/bin/su",
+                    "-mm",
                     "-c",
                     command
             )
@@ -48,7 +56,7 @@ final class RootQmi {
                     code == 0,
                     code,
                     output.isEmpty()
-                            ? ("exit code " + code)
+                            ? "exit code " + code
                             : output
             );
 
@@ -73,14 +81,14 @@ final class RootQmi {
     static Result apply(String path, String mode) {
         return run(
                 path,
-                mode.equals("ALL")
+                "ALL".equals(mode)
                         ? "unlock"
                         : "band_lock " + mode
         );
     }
 
     private static String shellQuote(String value) {
-        if (value == null) {
+        if (value == null || value.isEmpty()) {
             return "''";
         }
 
