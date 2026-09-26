@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Band Lock Toggle</string>
+    <string name="tile_label">Bands</string>
+</resources>
