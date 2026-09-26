@@ -9,44 +9,29 @@ final class RootQmi {
     static final String DEFAULT_PATH =
             "/data/data/com.termux/files/home/bandlock-pro/native/qmi_tool";
 
-    private static final String TERMUX_PREFIX =
-            "/data/data/com.termux/files/usr";
-
-    private static final String TERMUX_HOME =
-            "/data/data/com.termux/files/home";
-
-    private static final String TERMUX_SH =
-            TERMUX_PREFIX + "/bin/sh";
-
     static Result run(String path, String args) {
         Process p = null;
         StringBuilder out = new StringBuilder();
 
         try {
-            String toolCommand =
-                    shellQuote(path) +
-                    (args == null || args.trim().isEmpty()
-                            ? ""
-                            : " " + args);
+            /*
+             * Run exactly like the working Termux command:
+             *
+             * su -c '/path/to/qmi_tool args'
+             *
+             * Everything after -c is one shell command.
+             */
+            String command = shellQuote(path);
 
-            String command =
-                    "export " +
-                    "HOME=" + shellQuote(TERMUX_HOME) + " " +
-                    "PREFIX=" + shellQuote(TERMUX_PREFIX) + " " +
-                    "TMPDIR=" + shellQuote(TERMUX_PREFIX + "/tmp") + " " +
-                    "PATH=" + shellQuote(
-                            TERMUX_PREFIX + "/bin:"
-                            + TERMUX_PREFIX + "/bin/applets:"
-                            + "/system/bin:"
-                            + "/system/xbin"
-                    ) + " " +
-                    "LD_LIBRARY_PATH=" + shellQuote(
-                            TERMUX_PREFIX + "/lib"
-                    ) + "; " +
-                    "exec " + shellQuote(TERMUX_SH) +
-                    " -c " + shellQuote(toolCommand);
+            if (args != null && !args.trim().isEmpty()) {
+                command += " " + args;
+            }
 
-            p = new ProcessBuilder("su", "-c", command)
+            p = new ProcessBuilder(
+                    "su",
+                    "-c",
+                    command
+            )
                     .redirectErrorStream(true)
                     .start();
 
@@ -66,11 +51,15 @@ final class RootQmi {
 
             String output = out.toString().trim();
 
+            if (code == 0) {
+                return new Result(true, code, output);
+            }
+
             return new Result(
-                    code == 0,
+                    false,
                     code,
                     output.isEmpty()
-                            ? ("exit code " + code)
+                            ? "Command failed (exit code " + code + ")"
                             : output
             );
 
@@ -79,9 +68,9 @@ final class RootQmi {
             return new Result(
                     false,
                     -1,
-                    e.getClass().getSimpleName() +
-                            ": " +
-                            e.getMessage()
+                    e.getClass().getSimpleName()
+                            + ": "
+                            + e.getMessage()
             );
 
         } finally {
@@ -93,16 +82,21 @@ final class RootQmi {
     }
 
     static Result apply(String path, String mode) {
-        return run(
-                path,
-                mode.equals("ALL")
-                        ? "unlock"
-                        : "band_lock " + mode
-        );
+
+        String command;
+
+        if ("ALL".equals(mode)) {
+            command = "unlock";
+        } else {
+            command = "band_lock " + mode;
+        }
+
+        return run(path, command);
     }
 
     private static String shellQuote(String value) {
-        if (value == null) {
+
+        if (value == null || value.isEmpty()) {
             return "''";
         }
 
