@@ -1,11 +1,17 @@
+
 package com.meir.bandlocktoggle;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
 
 public class BandLockTileService extends TileService {
 
-    private static boolean busy = false;
+    private static volatile boolean busy = false;
+
+    private final Handler mainHandler =
+            new Handler(Looper.getMainLooper());
 
     @Override
     public void onStartListening() {
@@ -25,11 +31,8 @@ public class BandLockTileService extends TileService {
 
         final String current = Prefs.mode(this);
 
-        // Toggle:
-        // B3 -> ALL
-        // ALL -> B3
         final String next =
-                "0x4".equals(current)
+                "0x4".equals(current) || "4".equals(current)
                         ? "ALL"
                         : "0x4";
 
@@ -38,35 +41,53 @@ public class BandLockTileService extends TileService {
         if (tile != null) {
             tile.setState(Tile.STATE_UNAVAILABLE);
             tile.setLabel(
-                    "0x4".equals(next)
-                            ? "B3"
-                            : "ALL"
+                    "0x4".equals(next) ? "B3" : "ALL"
             );
             tile.updateTile();
         }
 
+        final String path = Prefs.path(this);
+
         new Thread(() -> {
+            RootQmi.Result result;
 
-            RootQmi.Result r =
-                    RootQmi.apply(
-                            Prefs.path(this),
-                            next
-                    );
+            try {
+                result = RootQmi.apply(path, next);
 
-            if (r.ok) {
-                // Save the NEW state only after QMI succeeded.
-                Prefs.setMode(this, next);
+                if (result.ok) {
+                    Prefs.setMode(this, next);
+                }
+            } catch (Exception e) {
+                result = new RootQmi.Result(
+                        false,
+                        -1,
+                        e.getClass().getSimpleName()
+                                + ": "
+                                + String.valueOf(e.getMessage())
+                );
             }
 
-            busy = false;
+            final RootQmi.Result finalResult = result;
 
-            updateTile(r.ok, next);
-
+            mainHandler.post(() -> {
+                try {
+                    updateTile(
+                            finalResult.ok,
+                            next,
+                            finalResult.output
+                    );
+                } finally {
+                    busy = false;
+                }
+            });
         }).start();
     }
 
-    private void updateTile(boolean success, String mode) {
-
+    private void updateTile(
+            boolean success,
+            String mode,
+            String output
+    ) {
         Tile tile = getQsTile();
 
         if (tile == null) {
@@ -74,10 +95,9 @@ public class BandLockTileService extends TileService {
         }
 
         if (success) {
-
             tile.setState(Tile.STATE_ACTIVE);
 
-            if ("0x4".equals(mode)) {
+            if ("0x4".equals(mode) || "4".equals(mode)) {
                 tile.setLabel("B3");
                 tile.setContentDescription(
                         "Band lock: B3"
@@ -88,13 +108,11 @@ public class BandLockTileService extends TileService {
                         "Band lock: All bands"
                 );
             }
-
         } else {
-
             tile.setState(Tile.STATE_INACTIVE);
             tile.setLabel("ERR");
             tile.setContentDescription(
-                    "Band lock command failed"
+                    "Band lock failed: " + output
             );
         }
 
@@ -102,7 +120,6 @@ public class BandLockTileService extends TileService {
     }
 
     private void updateFromPrefs() {
-
         Tile tile = getQsTile();
 
         if (tile == null) {
@@ -113,7 +130,7 @@ public class BandLockTileService extends TileService {
 
         tile.setState(Tile.STATE_ACTIVE);
 
-        if ("0x4".equals(mode)) {
+        if ("0x4".equals(mode) || "4".equals(mode)) {
             tile.setLabel("B3");
             tile.setContentDescription(
                     "Band lock: B3"
