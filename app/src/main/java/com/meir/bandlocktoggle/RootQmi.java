@@ -1,3 +1,4 @@
+
 package com.meir.bandlocktoggle;
 
 import java.io.BufferedReader;
@@ -9,28 +10,25 @@ final class RootQmi {
     static final String DEFAULT_PATH =
             "/data/data/com.termux/files/home/bandlock-pro/native/qmi_tool";
 
+    private RootQmi() {
+    }
+
     static Result run(String path, String args) {
         Process p = null;
         StringBuilder out = new StringBuilder();
 
         try {
-            String command = shellQuote(path);
+            String actualPath =
+                    path == null || path.trim().isEmpty()
+                            ? DEFAULT_PATH
+                            : path.trim();
+
+            String command = shellQuote(actualPath);
 
             if (args != null && !args.trim().isEmpty()) {
-                command += " " + args;
+                command += " " + args.trim();
             }
 
-            /*
-             * Use "su" instead of hardcoding /system/bin/su.
-             *
-             * KSU Next exposes su through the app's executable PATH,
-             * while /system/bin/su may not be directly visible from
-             * the application process namespace.
-             *
-             * -mm = mount-master namespace.
-             * This is required so the root process can see Termux's
-             * private /data/data filesystem.
-             */
             p = new ProcessBuilder(
                     "su",
                     "-mm",
@@ -53,16 +51,15 @@ final class RootQmi {
             }
 
             int code = p.waitFor();
-
             String output = out.toString().trim();
 
-            return new Result(
-                    code == 0,
-                    code,
-                    output.isEmpty()
-                            ? "exit code " + code
-                            : output
-            );
+            boolean ok = code == 0;
+
+            if (output.isEmpty()) {
+                output = "exit code " + code;
+            }
+
+            return new Result(ok, code, output);
 
         } catch (Exception e) {
 
@@ -71,11 +68,10 @@ final class RootQmi {
                     -1,
                     e.getClass().getSimpleName()
                             + ": "
-                            + e.getMessage()
+                            + String.valueOf(e.getMessage())
             );
 
         } finally {
-
             if (p != null) {
                 p.destroy();
             }
@@ -83,11 +79,20 @@ final class RootQmi {
     }
 
     static Result apply(String path, String mode) {
-        return run(
-                path,
-                "ALL".equals(mode)
-                        ? "unlock"
-                        : "band_lock " + mode
+        if ("ALL".equals(mode)) {
+            return run(path, "unlock");
+        }
+
+        // The qmi_tool command verified in Termux is:
+        // qmi_tool band_lock 4
+        if ("0x4".equals(mode) || "4".equals(mode)) {
+            return run(path, "band_lock 4");
+        }
+
+        return new Result(
+                false,
+                -1,
+                "Unsupported band mode: " + mode
         );
     }
 
